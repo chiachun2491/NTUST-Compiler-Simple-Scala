@@ -20,15 +20,16 @@ struct ident {
 };
 
 struct symbolTable {
-	int counts;
-	struct ident* first;
-	struct ident* last;
+    int counts;
+    struct ident* first;
+    struct ident* last;
 };
 
 int linenum = 1;
 char buf[MAX_LINE_LENG];
 struct symbolTable *table;
 
+/* create new symbol table */
 struct symbolTable* create() {
 	struct symbolTable* new_table;
 	new_table = (struct symbolTable*)calloc(1, sizeof(struct symbolTable));
@@ -42,17 +43,22 @@ struct symbolTable* create() {
 	return new_table;
 };
 
+/* lookup identifier is in symbol table or not */
 int lookup(struct symbolTable* table, char* s) {
 	struct ident* cur;
 	for (cur = table->first; cur != NULL; cur = cur->next) {
+        // find match ident then return index
 		if (!strcmp(cur->str, s)) {
 			return cur->index;
 		}
 	}
+    // if not found
 	return -1;
 }
 
+/* insert identifier in symbol table */
 void insert(struct symbolTable* table, char* s) {
+    // ensure identifier is not in symbolTable
     if (lookup(table, s) == -1) {
         struct ident* new_ident;
         new_ident = (struct ident*)calloc(1, sizeof(struct ident));
@@ -76,6 +82,7 @@ void insert(struct symbolTable* table, char* s) {
 
 }
 
+/* print symbol table */
 void dump(struct symbolTable* table) {
 	printf("Symbol Table:\n");
 	struct ident* cur;
@@ -85,8 +92,7 @@ void dump(struct symbolTable* table) {
 }
 %}
 
- /* definitions */
-
+ /* Definitions */
 DIGIT   [0-9]
 DIGITS  {DIGIT}+
 LETTER  [A-Za-z]
@@ -105,9 +111,9 @@ REAL {PLAINREAL}|{EXPREAL}
 %x COMMENT 
 
 %%
- /* actions */
+ /* Actions */
 
- /* keywords */
+ /* Keywords */
 boolean	{ tokenKeyword("BOOLEAN"); }
 break	{ tokenKeyword("BREAK"); }
 char	{ tokenKeyword("CHAR"); }
@@ -138,7 +144,6 @@ var	{ tokenKeyword("VAR"); }
 while	{ tokenKeyword("WHILE"); }
 
  /* Delimiters */
-
 {DELIMITER} | 
 {ARITHMETIC} |
 {REMAINDER} |
@@ -146,18 +151,22 @@ while	{ tokenKeyword("WHILE"); }
 {RELATIONAL} |
 {LOGICAL} { token(yytext); }
 
+ /* Integer */
 {INTEGER} { tokenInteger("integer", atoi(yytext)); }
 
+ /* Plain Real */
 {PLAINREAL} { tokenPlainReal("plain_real", atof(yytext)); }
 
+ /* Exp Real */
 {EXPREAL} { tokenExpReal("exp_real", atof(yytext)); }
 
+ /* Identifier */
 {IDENTIFIER} { 
     tokenString("id", yytext); 
     insert(table, yytext);
 }
 
- /* Comment */
+ /* C Style Comment */
 "/*" { LIST; BEGIN COMMENT; }
 <COMMENT>. { LIST; }
 <COMMENT>\n  {
@@ -167,11 +176,11 @@ while	{ tokenKeyword("WHILE"); }
 }
 <COMMENT>"*/" { LIST; BEGIN INITIAL; }
 
+ /* C++ Style Comment */
 "//".* { LIST; }
 
  /* String */
-
-\"[^\"]*\" { 
+\"[^\"^\n]*\" { 
     char c = input();
     unput(c);
 
@@ -195,32 +204,34 @@ while	{ tokenKeyword("WHILE"); }
     }
 }
 
+ /* Newline */
 \n  {
     LIST;
     printf("%d: %s", linenum++, buf);
     buf[0] = '\0';
-    }
+}
 
+ /* End of file */
 <<EOF>> {
-        LIST;
-        printf("%d: %s\n", linenum++, buf);
-        buf[0] = '\0';
-        return 0;
-        }
+    LIST;
+    printf("%d: %s\n", linenum++, buf);
+    buf[0] = '\0';
+    return 0;
+}
 
 [ \t]*  {LIST;}
 
-. {
+.   {
     LIST;
     printf("%d:%s\n", linenum++, buf);
     printf("bad character:'%s'\n",yytext);
     exit(-1);
 }
 %%
- /* user codes */
-
+ /* User codes */
 int main() {
         table = create();
         yylex();
+        printf("\n");
         dump(table);
 }
