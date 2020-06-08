@@ -70,8 +70,6 @@ void yyerror(std::string msg, int customLinenum) {
 
 %type <intVal> expression
 %type <intVal> function_invocation
-%type <intVal> integer_expression
-%type <intVal> boolean_expression
 %type <intVal> const_expression
 %type <intVal> array_reference
 
@@ -845,27 +843,19 @@ array_reference: IDENT SQUE_L integer_expression SQUE_R {
 
 integer_expression: expression { 
                         Trace("integer_expression:");
-                        if ($1 == 2) {
-                            $$ = $1;
-                        }
-                        else {
+                        if ($1 != 2) {
                             string msg = "This expression not integer.";
                             yyerror(msg);
-                            $$ = TYPE_ERROR;
                         }
                   }
                   ;
 
 boolean_expression: expression {
                         Trace("boolean_expression:");
-                        if ($1 == 1) {
-                            $$ = $1;
-                        }
-                        else {
+                        if ($1 != 1) {
                             string msg = "This expression not boolean.";
                             yyerror(msg);
-                            $$ = TYPE_ERROR;
-                        }    
+                        } 
                   }
                   ; 
 %%
