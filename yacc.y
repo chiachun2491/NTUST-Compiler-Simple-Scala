@@ -415,10 +415,18 @@ statement_4: READ IDENT {
            ;
 
 statement_5: RETURN {
-                Trace("statement_5:");
-                if (nowScope->returnType != METHOD_TYPE_FUNC) {
-                    if (nowScope->returnType >= METHOD_TYPE_INTEGER && nowScope->returnType <= METHOD_TYPE_BOOL) {
-                        string msg = nowScope->scopeName + " need return value.";
+                Trace("statement_5: RETURN");
+                symbolTable* temp_scope = nowScope;
+                while (temp_scope->returnType == NON_TYPE) {
+                    if (temp_scope->fatherTable == NULL) {
+                        break;
+                    }
+                    temp_scope = temp_scope->fatherTable;
+                }
+                Trace("Return scope name:" + temp_scope->scopeName);
+                if (temp_scope->returnType != METHOD_TYPE_FUNC) {
+                    if (temp_scope->returnType >= METHOD_TYPE_INTEGER && temp_scope->returnType <= METHOD_TYPE_BOOL) {
+                        string msg = temp_scope->scopeName + " need return value.";
                         yyerror(msg, linenum - 1);
                     }
                     else {
@@ -428,16 +436,24 @@ statement_5: RETURN {
                 }
             }
            | RETURN expression { 
-                Trace("statement_5:");
-                if (nowScope->returnType >= METHOD_TYPE_INTEGER && nowScope->returnType <= METHOD_TYPE_BOOL) {
-                    if (nowScope->returnType % TYPE_COUNT != $2) {
+                Trace("statement_5: RETURN expression");
+                symbolTable* temp_scope = nowScope;
+                while (temp_scope->returnType == NON_TYPE) {
+                    if (temp_scope->fatherTable == NULL) {
+                        break;
+                    }
+                    temp_scope = temp_scope->fatherTable;
+                }
+                Trace("Return scope name:" + temp_scope->scopeName);
+                if (temp_scope->returnType >= METHOD_TYPE_INTEGER && temp_scope->returnType <= METHOD_TYPE_BOOL) {
+                    if (temp_scope->returnType % TYPE_COUNT != $2) {
                         string msg = "Return type error.";
                         yyerror(msg, linenum - 1);
                     }
                 }
                 else {
-                    if (nowScope->returnType == METHOD_TYPE_FUNC) {
-                        string msg = nowScope->scopeName + " no need return value.";
+                    if (temp_scope->returnType == METHOD_TYPE_FUNC) {
+                        string msg = temp_scope->scopeName + " no need return value.";
                         yyerror(msg, linenum - 1);
                     }
                     else {
