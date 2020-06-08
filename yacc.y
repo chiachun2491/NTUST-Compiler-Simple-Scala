@@ -480,7 +480,59 @@ for_loop_statement: FOR PARE_L IDENT {
                     }
                     ARRO INTEGER_VAL TO INTEGER_VAL PARE_R block_or_simple_statement;
 
-procedure_invocation: IDENT | IDENT PARE_L option_comma_separated_expressions PARE_R;
+procedure_invocation: IDENT {
+                        Trace("procedure_invocation:");
+                        nowIdent = nowScope->lookup($1, true);
+                        if (nowIdent == NULL) {
+                            string msg = string($1) + " not declared.";
+                            yyerror(msg);
+                        }
+                        else if (nowIdent->type != METHOD_TYPE_FUNC) {
+                            string msg = string($1) + " not no-return method.";
+                            yyerror(msg);
+                        }
+                        if (nowIdent->args.size() != 0) {
+                            string msg = string($1) + " need argument.";
+                            yyerror(msg);
+                        }
+                    } | IDENT PARE_L option_comma_separated_expressions PARE_R {
+                        Trace("procedure_invocation:");
+                        nowIdent = nowScope->lookup($1, true);
+                        if (nowIdent == NULL) {
+                            string msg = string($1) + " not declared.";
+                            yyerror(msg);
+                        }
+                        else if (nowIdent->type != METHOD_TYPE_FUNC) {
+                            string msg = string($1) + " not no-return method.";
+                            yyerror(msg);
+                        }
+                        string trace_msg = "nowIdent->name " + nowIdent->name + to_string(nowIdent->args.size()) + " " + to_string(para.size());
+                        Trace(trace_msg);
+                        if (nowIdent->args.size() > para.size()) {
+                            string msg = "Few arguments in " + string($1) +".";
+                            yyerror(msg);
+                        }
+                        else if (nowIdent->args.size() < para.size()) {
+                            string msg = "Over arguments in " + string($1) +".";
+                            yyerror(msg);
+                        }
+                        else {
+                            bool typeCheck = true;
+                            for (int i = 0; i < para.size(); i++) {
+                                string trace_msg = "typeCheck " + to_string(i) + " : " + to_string(nowIdent->args[i]) + " " + to_string(para[i]);
+                                Trace(trace_msg);
+                                if (nowIdent->args[i] % TYPE_COUNT != para[i]) {
+                                    typeCheck = false;
+                                    break;
+                                }
+                            }
+                            if (!typeCheck) {
+                                string msg = string($1) + " argument type check error.";
+                                yyerror(msg);
+                            }
+                        }
+                    }
+                    ;
 
 expression: expression LG_OR expression {
               Trace("expression LG_OR expression:");
