@@ -99,9 +99,6 @@ object_inside_statement: var_const_declaration
                        | method_declartion
                        ;
 
-// var_const_declarations: /* empty */
-//                         | var_const_declaration var_const_declarations ;
-
 var_const_declaration: VAL const_declaration
                     |  VAR var_declaration;
 
@@ -109,10 +106,8 @@ const_declaration: IDENT option_types ASSI const_expression {
                     Trace("const_declaration:");
                     if (nowScope->lookup($1, false) == NULL) {
                         if ($2 != TYPE_NOT_DEFINE) {
-                            if ($2 == $4) {
-                                nowScope->insert($1, CONST_INTEGER + $2);
-                            }
-                            else {
+                            nowScope->insert($1, CONST_INTEGER + $2);
+                            if ($2 != $4) {
                                 yyerror("Constant declartion type not equal with value type.", linenum - 1);
                             }
                         }
@@ -153,10 +148,8 @@ var_declaration: IDENT option_types option_assign_value {
                     Trace("var_declaration:");
                     if (nowScope->lookup($1, false) == NULL) {
                         if ($2 != TYPE_NOT_DEFINE && $3 != TYPE_NOT_DEFINE) {
-                            if ($2 == $3) {
-                                nowScope->insert($1, INTEGER_VAR + $2);
-                            }
-                            else {
+                            nowScope->insert($1, INTEGER_VAR + $2);
+                            if ($2 != $3) {
                                 yyerror("Variable declartion type not equal with value type.", linenum - 1);
                             }
                         }
@@ -196,9 +189,6 @@ array_declartion: IDENT COLO types SQUE_L INTEGER_VAL SQUE_R {
                     }
                 } 
                 ;
-
-// method_declartions: method_declartion 
-//                   | method_declartion method_declartions;
 
 method_declartion: DEF IDENT { 
                     Trace("method_declartion:");
@@ -262,9 +252,6 @@ block_inside_statements: /* empty */
 
 block_inside_statement: var_const_declaration | statement;
 
-// statements: /* empty */ 
-//           | { Trace("statement:"); } statement statements;
-
 statement: statement_1
          | statement_2
          | statement_3
@@ -278,6 +265,7 @@ statement: statement_1
 
 statement_1: IDENT ASSI expression { 
                 Trace("statement_1:");
+                Trace("linenum:" + to_string(linenum));
                 nowIdent = nowScope->lookup($1, true);
                 if (nowIdent == NULL) {
                     string msg = string($1) + " not declared.";
@@ -368,13 +356,13 @@ statement_2: IDENT SQUE_L integer_expression SQUE_R ASSI expression {
 
 statement_3: PRINT PARE_L expression PARE_R { 
                 Trace("statement_3:");
-                if ($3 <= METHOD_TYPE_FUNC && $3 > BOOL_VAR) {
+                if ($3 == TYPE_ERROR) {
                     yyerror("This expression can't print.", linenum - 1);
                 }
            }
            | PRINTLN PARE_L expression PARE_R { 
                 Trace("statement_3:");
-                if ($3 <= METHOD_TYPE_FUNC && $3 > BOOL_VAR) {
+                if ($3 == TYPE_ERROR) {
                     yyerror("This expression can't print.", linenum - 1);
                 }
            }
@@ -494,7 +482,7 @@ for_loop_statement: FOR PARE_L IDENT {
                     }
                     ARRO INTEGER_VAL TO INTEGER_VAL PARE_R block_or_simple_statement;
 
-procedure_invocation: IDENT | IDENT PARE_L comma_separated_expressions PARE_R;
+procedure_invocation: IDENT | IDENT PARE_L option_comma_separated_expressions PARE_R;
 
 expression: expression LG_OR expression {
               Trace("expression LG_OR expression:");
@@ -742,13 +730,13 @@ expression: expression LG_OR expression {
                 Trace("expression: IDENT:");
                 nowIdent = nowScope->lookup($1, true);
                 Trace($1);
-                Trace(to_string(nowIdent->type));
                 if (nowIdent == NULL) {
                     string msg = string($1) + " not declared.";
                     yyerror(msg);
                     $$ = TYPE_ERROR;
                 }
                 else {
+                    Trace(to_string(nowIdent->type));
                     if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= BOOL_VAR) {
                         $$ = nowIdent->type % TYPE_COUNT;
                     }
