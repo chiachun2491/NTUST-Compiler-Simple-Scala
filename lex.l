@@ -12,6 +12,7 @@
 #define tokenPlainReal(t,i) {LIST; printf("<%s:%f>\n",t,i);}
 #define tokenExpReal(t,i) {LIST; printf("<%s:%e>\n",t,i);}
 #define tokenString(t,s) {LIST; printf("<%s:%s>\n",t,s);}
+#define tokenChar(t,s) {LIST; printf("<%s:%c>\n",t,s);}
 
 #define MAX_LINE_LENG 256
 
@@ -25,6 +26,7 @@ DIGITS  {DIGIT}+
 LETTER  [A-Za-z]
 
 IDENTIFIER {LETTER}({LETTER}|{DIGIT})*
+CHARACTER ({LETTER}|{DIGIT})
 INTEGER {DIGITS}
 PLAINREAL {DIGITS}"."{DIGITS}
 EXPREAL {DIGITS}"."{DIGITS}[Ee][+-]?{DIGITS}
@@ -131,6 +133,13 @@ while	    { tokenKeyword("WHILE"); return(WHILE); }
     tokenString("id", yytext);
     yylval.strVal = strdup(yytext);
     return(IDENT);
+}
+
+ /* Character */
+\'{CHARACTER}\' { 
+    sscanf(yytext, "%c", &(yylval.charVal));
+    tokenChar("char", yytext[0]);
+    return(CHAR_VAL);
 }
 
  /* String */

@@ -41,6 +41,7 @@ void yyerror(std::string msg, int customLinenum) {
     int intVal;
     char* strVal;
     float realVal;
+    char charVal;
 }
 /* tokens */
 %token INTEGER_VAL REAL_VAL CHAR_VAL STRING_VAL
