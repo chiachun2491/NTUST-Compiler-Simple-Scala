@@ -1,15 +1,18 @@
-all: scanner
+all: parser
 
-CC = cc
+CC = g++
 LEX = lex
+YACC = yacc
 
-scanner: lex.l
+parser: lex.l yacc.y symbolTable.h symbolTable.cpp
 	$(LEX) lex.l
-	$(CC) -o scanner -O lex.yy.c -ll
+	$(YACC) -d yacc.y -d
+	$(CC) -o parser y.tab.c symbolTable.cpp -ll -ly -std=c++11
 
 .PHONY: clean,run
+
 clean:
-	rm lex.yy.c scanner
+	rm lex.yy.c y.tab.* parser
 
 test:
-	./scanner
+	./parser
