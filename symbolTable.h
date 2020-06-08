@@ -5,7 +5,6 @@
 
 #define MAX_LINE_LENG 256
 #define TYPE_COUNT 5
-#define warning(t) std::cout << t << std::endl
 #define METHOD_TYPE_NOT_DEFINE -9
 #define TYPE_NOT_DEFINE -8
 #define PARAM_NOT_EXIST -7
@@ -52,9 +51,6 @@ public:
 
     /* Insert Method Parameter data type */
     void addParam(int type);
-
-    /* Compare Method Parameter type is same */
-    void checkParam(int type, int paramIndex);
 };
 
 class ident;

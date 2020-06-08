@@ -22,22 +22,6 @@ void ident::addParam(int type) {
     this->args.push_back(type);
 }
 
-/* Compare Method Parameter type is same */
-void ident::checkParam(int type, int paramIndex) {
-    if (this->args.empty()) {
-        warning("Type Error: Not a Method");
-    }
-    else if (paramIndex < 0 || paramIndex >= this->args.size()){
-        warning("Overflow: Out of param range");
-    }
-    else if (this->args[paramIndex] < METHOD_TYPE_INTEGER || this->args[paramIndex] > BOOL_ARRAY ||
-            type < METHOD_TYPE_INTEGER || type > BOOL_ARRAY || (this->args[paramIndex] % TYPE_COUNT != type % TYPE_COUNT)) {
-        warning("Type Error: Formal parameter data type not same.");
-    }
-    return;
-}
-
-
 symbolTable::symbolTable() {
     this->scopeName = "";
     this->fatherTable = NULL;
