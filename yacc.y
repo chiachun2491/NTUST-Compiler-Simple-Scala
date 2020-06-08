@@ -518,10 +518,11 @@ expression: expression LG_OR expression {
                   $$ = TYPE_ERROR;
               }
           }
-          | expression LG_NOT expression {
-              Trace("expression LG_NOT expression:");
-              if ($1 == 1 && $3 == 1){
-                  $$ = $1;
+          | LG_NOT expression {
+              Trace("LG_NOT expression:");
+              Trace(to_string($2));
+              if ($2 == 1){
+                  $$ = $2;
               }
               else {
                   string msg = "can't use on non-boolean.";
@@ -740,6 +741,8 @@ expression: expression LG_OR expression {
           | IDENT {
                 Trace("expression: IDENT:");
                 nowIdent = nowScope->lookup($1, true);
+                Trace($1);
+                Trace(to_string(nowIdent->type));
                 if (nowIdent == NULL) {
                     string msg = string($1) + " not declared.";
                     yyerror(msg);
