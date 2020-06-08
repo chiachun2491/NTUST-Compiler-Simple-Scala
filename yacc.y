@@ -603,7 +603,7 @@ expression: expression LG_OR expression {
           }
           | expression RL_EQ expression {
               Trace("expression RL_EQ expression:");
-              if (($1 == 2 || $1 == 3 || $1 == 4) && ($3 == 2 || $3 == 3 || $3 == 4)) {
+              if (($1 >= 0 && $1 <= 4) && ($3 >=0 && $3 <= 4)) {
                   if ($1 == $3) {
                       $$ = 1;
                   }
@@ -621,7 +621,7 @@ expression: expression LG_OR expression {
           }
           | expression RL_NE expression {
               Trace("expression RL_NE expression:");
-              if (($1 == 2 || $1 == 3 || $1 == 4) && ($3 == 2 || $3 == 3 || $3 == 4)) {
+              if (($1 >= 0 && $1 <= 4) && ($3 >=0 && $3 <= 4)) {
                   if ($1 == $3) {
                       $$ = 1;
                   }
