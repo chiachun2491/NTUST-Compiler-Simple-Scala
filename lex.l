@@ -6,6 +6,8 @@
 #include "y.tab.h"
 
 #define LIST     strcat(buf,yytext)
+// #define OUTPUT
+#ifdef OUTPUT
 #define token(t) {LIST; printf("<'%s'>\n",t);}
 #define tokenKeyword(t) {LIST; printf("<%s>\n",t);}
 #define tokenInteger(t,i) {LIST; printf("<%s:%d>\n",t,i);}
@@ -13,6 +15,15 @@
 #define tokenExpReal(t,i) {LIST; printf("<%s:%e>\n",t,i);}
 #define tokenString(t,s) {LIST; printf("<%s:%s>\n",t,s);}
 #define tokenChar(t,s) {LIST; printf("<%s:%c>\n",t,s);}
+#else
+#define token(t) {LIST;}
+#define tokenKeyword(t) {LIST;}
+#define tokenInteger(t,i) {LIST;}
+#define tokenPlainReal(t,i) {LIST;}
+#define tokenExpReal(t,i) {LIST;}
+#define tokenString(t,s) {LIST;}
+#define tokenChar(t,s) {LIST;}
+#endif
 
 #define MAX_LINE_LENG 256
 
@@ -174,7 +185,10 @@ while	    { tokenKeyword("WHILE"); return(WHILE); }
 <COMMENT>. { LIST; }
 <COMMENT>\n  {
     LIST;
-    printf("%d: %s", linenum++, buf);
+#ifdef OUTPUT
+    printf("%d: %s", linenum, buf);
+#endif
+    linenum++;
     buf[0] = '\0';
 }
 <COMMENT>"*/" { LIST; BEGIN INITIAL; }
@@ -185,14 +199,20 @@ while	    { tokenKeyword("WHILE"); return(WHILE); }
  /* Newline */
 \n  {
     LIST;
-    printf("%d: %s", linenum++, buf);
+#ifdef OUTPUT
+    printf("%d: %s", linenum, buf);
+#endif
+    linenum++;
     buf[0] = '\0';
 }
 
  /* End of file */
 <<EOF>> {
     LIST;
-    printf("%d: %s\n", linenum++, buf);
+#ifdef OUTPUT
+    printf("%d: %s\n", linenum, buf);
+#endif
+    linenum++;
     buf[0] = '\0';
     return 0;
 }
@@ -201,8 +221,10 @@ while	    { tokenKeyword("WHILE"); return(WHILE); }
 
 .   {
     LIST;
+#ifdef OUTPUT
     printf("%d:%s\n", linenum++, buf);
     printf("bad character:'%s'\n",yytext);
+#endif
     exit(-1);
 }
 %%
