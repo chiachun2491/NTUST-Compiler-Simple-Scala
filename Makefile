@@ -13,6 +13,3 @@ parser: lex.l yacc.y symbolTable.h symbolTable.cpp
 
 clean:
 	rm lex.yy.c y.tab.* parser
-
-test:
-	./parser
