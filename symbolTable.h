@@ -55,13 +55,6 @@ public:
     // putstatic, istore byteCode
     std::string storeBC;
 
-    // union data for constants
-    int integerValue;
-    double realValue;
-    char charValue;
-    std::string stringValue;
-    bool boolValue;
-
     /* Insert Method Parameter data type */
     void addParam(int type);
 };

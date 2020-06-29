@@ -26,18 +26,21 @@ symbolTable* nowScope;      // symbolTable of nowScope
 symbolTable* fatherScope;   // symbolTable of outsideScope
 ident* nowIdent;            // identifer 
 vector<int> para;           // method parameters
-bool legalMethod = true;    // method flag
-bool mainMethod = false;    // main method flag
+
 string filename = "";       // file name
 string rawname = "";        // file name without extension  
-int branchIndex = 0;        // branch index
-stack<int> branch;          // stack to store branch number
-ofstream fout;              // bytecode file stream
+
+bool mainMethod = false;    // main method flag
 bool assignValue = false;   // assign value flag
-bool canWrite = true;       // switch to dual_write
-bool elseBranch = false;    // flag to record need else branch number
+
+ofstream fout;              // bytecode file stream
 int tabs = 0;               // tabs number for output
 
+bool canWrite = true;       // switch to dual_write
+bool elseBranch = false;    // flag to record need else branch number
+
+int branchIndex = 0;        // branch index
+stack<int> branch;          // stack to store branch number
 
 // union data for declaration
 int integerValue = 0;
@@ -251,8 +254,7 @@ const_declaration: IDENT option_types ASSI const_expression {
                         }
                     }
                     else {
-                        string msg = string($1) + " already declared.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " already declared.", linenum - 1);
                     }
                  }
                  ;
@@ -397,8 +399,7 @@ var_declaration: IDENT option_types option_assign_value {
                         } 
                     }
                     else {
-                        string msg = string($1) + " already declared.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " already declared.", linenum - 1);
                     }
                }
                | array_declartion
@@ -414,8 +415,7 @@ array_declartion: IDENT COLO types SQUE_L INTEGER_VAL SQUE_R {
                         nowScope->insert($1, INTEGER_ARRAY + $3); 
                     }
                     else {
-                        string msg = string($1) + " already declared.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " already declared.", linenum - 1);
                     }
                 } 
                 ;
@@ -424,16 +424,13 @@ method_declartion: DEF IDENT {
                     Trace("method_declartion:");
                     // legal method
                     if (nowScope->lookup($2, false) == NULL) {
-                        legalMethod = true;
                         nowScope->insert($2, METHOD_TYPE_NOT_DEFINE); 
                         nowIdent = nowScope->lookup($2, false);
                         nowScope = nowScope->createChild($2); 
                     }
                     // illegal method
                     else {
-                        legalMethod = false;
-                        string msg = string($2) + " already declared.";
-                        yyerror(msg);
+                        yyerror(string($2) + " already declared.");
 
                         canWrite = false;
                         nowIdent = new ident($2, METHOD_TYPE_NOT_DEFINE);
@@ -483,6 +480,9 @@ method_declartion: DEF IDENT {
                     // declartion bytecode
                     if (nowIdent->name == "main") {
                         dual_write(fout, "method public static void main(java.lang.String[])"); 
+                        if (nowIdent->args.size() > 0) {
+                            yyerror("main function cannot overwrite formal argument.");
+                        }
                     }
                     else {
                         dual_write(fout, "method public static " + returnTypeStr + nameArguments);
@@ -516,8 +516,7 @@ method_formal_arguments: method_formal_argument
 method_formal_argument: IDENT COLO types { 
                             Trace("method_formal_argument:");
                             nowIdent->addParam(INTEGER_VAR + $3);
-                            string trace_msg = "size: " + to_string(nowIdent->args.size());
-                            Trace(trace_msg);
+                            Trace("size: " + to_string(nowIdent->args.size()));
 
                             nowScope->insert($1, INTEGER_VAR + $3);
                             ident* arguIdent = nowScope->lookup($1, false);
@@ -566,29 +565,24 @@ statement_1: IDENT ASSI expression {
                 Trace("linenum:" + to_string(linenum));
                 nowIdent = nowScope->lookup($1, true);
                 if (nowIdent == NULL) {
-                    string msg = string($1) + " not declared.";
-                    yyerror(msg, linenum - 1);
+                    yyerror(string($1) + " not declared.", linenum - 1);
                 }
                 else {
                     // set bytecode whatever type check
                     dual_write(fout, nowIdent->storeBC);
 
                     if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= CONST_BOOL) {
-                        string msg = string($1) + " is constant, can't reassign.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " is constant, can't reassign.", linenum - 1);
                     }
                     else if (nowIdent->type >= INTEGER_ARRAY && nowIdent->type <= BOOL_ARRAY) {
-                        string msg = string($1) + " is array, can't assign value.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " is array, can't assign value.", linenum - 1);
                     }
                     else if (nowIdent->type >= METHOD_TYPE_FUNC && nowIdent->type <= METHOD_TYPE_BOOL) {
-                        string msg = string($1) + " is function, can't assign value.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " is function, can't assign value.", linenum - 1);
                     }
                     else if (nowIdent->type >= INTEGER_VAR && nowIdent->type <= BOOL_VAR) {
                         if (nowIdent->type % TYPE_COUNT != $3) {
-                            string msg = string($1) + " data type not correct, can't assign value.";
-                            yyerror(msg, linenum - 1);
+                            yyerror(string($1) + " data type not correct, can't assign value.", linenum - 1);
                         }
                     }
                     else if (nowIdent->type == TYPE_NOT_DEFINE) {
@@ -614,8 +608,7 @@ statement_1: IDENT ASSI expression {
                         }
                     }
                     else {
-                        string msg = string($1) + " occur unknow error.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " occur unknow error.", linenum - 1);
                     }
                 }
            }
@@ -630,31 +623,25 @@ statement_2: IDENT SQUE_L integer_expression SQUE_R ASSI expression {
                 // still check grammar
                 nowIdent = nowScope->lookup($1, true);
                 if (nowIdent == NULL) {
-                    string msg = string($1) + " not declared.";
-                    yyerror(msg, linenum - 1);
+                    yyerror(string($1) + " not declared.", linenum - 1);
                 }
                 else {
                     if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= CONST_BOOL) {
-                        string msg = string($1) + " is constant, not array.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " is constant, not array.", linenum - 1);
                     }
                     else if (nowIdent->type >= INTEGER_ARRAY && nowIdent->type <= BOOL_ARRAY) {
                         if (nowIdent->type % TYPE_COUNT != $6) {
-                            string msg = string($1) + " data type not correct, can't assign value.";
-                            yyerror(msg, linenum - 1);
+                            yyerror(string($1) + " data type not correct, can't assign value.", linenum - 1);
                         }
                     }
                     else if (nowIdent->type >= METHOD_TYPE_FUNC && nowIdent->type <= METHOD_TYPE_BOOL) {
-                        string msg = string($1) + " is function, not array.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " is function, not array.", linenum - 1);
                     }
                     else if (nowIdent->type >= INTEGER_VAR && nowIdent->type <= BOOL_VAR) {
-                        string msg = string($1) + " is variable, not array.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " is variable, not array.", linenum - 1);
                     }
                     else {
-                        string msg = string($1) + " occur unknow error.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($1) + " occur unknow error.", linenum - 1);
                     }
                 }
             }
@@ -713,21 +700,17 @@ statement_4: READ IDENT {
                 // still check grammar
                 nowIdent = nowScope->lookup($2, true);
                 if (nowIdent == NULL) {
-                    string msg = string($2) + " not declared.";
-                    yyerror(msg, linenum - 1);
+                    yyerror(string($2) + " not declared.", linenum - 1);
                 }
                 else {
                     if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= CONST_BOOL) {
-                        string msg = string($2) + " is constant, can't reassign.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($2) + " is constant, can't reassign.", linenum - 1);
                     }
                     else if (nowIdent->type >= INTEGER_ARRAY && nowIdent->type <= BOOL_ARRAY) {
-                        string msg = string($2) + " is array, can't assign.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($2) + " is array, can't assign.", linenum - 1);
                     }
                     else if (nowIdent->type >= METHOD_TYPE_FUNC && nowIdent->type <= METHOD_TYPE_BOOL) {
-                        string msg = string($2) + " is function, can't assign.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($2) + " is function, can't assign.", linenum - 1);
                     }
                     else if (nowIdent->type >= INTEGER_VAR && nowIdent->type <= BOOL_VAR) {
                         string msg = string($2) + " is variable, can reassign.";
@@ -736,8 +719,7 @@ statement_4: READ IDENT {
                         string msg = string($2) + " is non define type variable, can assign.";
                     }
                     else {
-                        string msg = string($2) + " occur unknow error.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(string($2) + " occur unknow error.", linenum - 1);
                     }
                 }
            }
@@ -760,12 +742,10 @@ statement_5: RETURN {
                 temp_scope->returnCheck = true;
                 if (temp_scope->returnType != METHOD_TYPE_FUNC) {
                     if (temp_scope->returnType >= METHOD_TYPE_INTEGER && temp_scope->returnType <= METHOD_TYPE_BOOL) {
-                        string msg = temp_scope->scopeName + " need return value.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(temp_scope->scopeName + " need return value.", linenum - 1);
                     }
                     else {
-                        string msg = "Don't do return in non-method scope.";
-                        yyerror(msg, linenum - 1);
+                        yyerror("Don't do return in non-method scope.", linenum - 1);
                     }
                 }
             }
@@ -786,18 +766,15 @@ statement_5: RETURN {
                 temp_scope->returnCheck = true;
                 if (temp_scope->returnType >= METHOD_TYPE_INTEGER && temp_scope->returnType <= METHOD_TYPE_BOOL) {
                     if (temp_scope->returnType % TYPE_COUNT != $2) {
-                        string msg = "Return type error.";
-                        yyerror(msg, linenum - 1);
+                        yyerror("Return type error.", linenum - 1);
                     }
                 }
                 else {
                     if (temp_scope->returnType == METHOD_TYPE_FUNC) {
-                        string msg = temp_scope->scopeName + " no need return value.";
-                        yyerror(msg, linenum - 1);
+                        yyerror(temp_scope->scopeName + " no need return value.", linenum - 1);
                     }
                     else {
-                        string msg = "Don't do return in non-method scope.";
-                        yyerror(msg, linenum - 1);
+                        yyerror("Don't do return in non-method scope.", linenum - 1);
                     }
                 }
             }
@@ -876,12 +853,10 @@ for_loop_statement: FOR PARE_L IDENT {
                         Trace("for_loop_statement:");
                         nowIdent = nowScope->lookup($3, true);
                         if (nowIdent == NULL) {
-                            string msg = string($3) + " not declared.";
-                            yyerror(msg);
+                            yyerror(string($3) + " not declared.");
                         }
                         else if (nowIdent->type != INTEGER_VAR) {
-                            string msg = string($3) + " not integer.";
-                            yyerror(msg);
+                            yyerror(string($3) + " not integer.");
                         }
                     }
                     ARRO INTEGER_VAL TO INTEGER_VAL {
@@ -908,8 +883,7 @@ for_loop_statement: FOR PARE_L IDENT {
                             dual_write(fout, nowIdent->accessBC);
                         }
                         else {
-                            string msg = string($3) + " not found (occur error at forloop bytecode).";
-                            yyerror(msg);
+                            yyerror(string($3) + " not found (occur error at forloop bytecode).");
                         }
                         // ifequal exit
                         dual_write(fout, "isub");
@@ -922,16 +896,14 @@ for_loop_statement: FOR PARE_L IDENT {
                             dual_write(fout, nowIdent->accessBC);
                         }
                         else {
-                            string msg = string($3) + " not found (occur error at forloop bytecode).";
-                            yyerror(msg);
+                            yyerror(string($3) + " not found (occur error at forloop bytecode).");
                         }
                         dual_write(fout, "iadd");
                         if (nowIdent != NULL) {
                             dual_write(fout, nowIdent->storeBC);
                         }
                         else {
-                            string msg = string($3) + " not found (occur error at forloop bytecode).";
-                            yyerror(msg);
+                            yyerror(string($3) + " not found (occur error at forloop bytecode).");
                         }
 
                         // goback
@@ -947,20 +919,17 @@ procedure_invocation: IDENT {
                         Trace("procedure_invocation:");
                         nowIdent = nowScope->lookup($1, true);
                         if (nowIdent == NULL) {
-                            string msg = string($1) + " not declared.";
-                            yyerror(msg);
+                            yyerror(string($1) + " not declared.");
                         }
                         else {
                             // set bytecode whatever type check
                             dual_write(fout, nowIdent->accessBC);
 
                             if (nowIdent->type != METHOD_TYPE_FUNC) {
-                                string msg = string($1) + " not no-return method.";
-                                yyerror(msg);
+                                yyerror(string($1) + " not no-return method.");
                             }
                             if (nowIdent->args.size() != 0) {
-                                string msg = string($1) + " need argument.";
-                                yyerror(msg);
+                                yyerror(string($1) + " need argument.");
                             }
                         }
                         
@@ -968,40 +937,33 @@ procedure_invocation: IDENT {
                         Trace("procedure_invocation:");
                         nowIdent = nowScope->lookup($1, true);
                         if (nowIdent == NULL) {
-                            string msg = string($1) + " not declared.";
-                            yyerror(msg);
+                            yyerror(string($1) + " not declared.");
                         }
                         else {
                             // set bytecode whatever type check
                             dual_write(fout, nowIdent->accessBC);
 
                             if (nowIdent->type != METHOD_TYPE_FUNC) {
-                                string msg = string($1) + " not no-return method.";
-                                yyerror(msg);
+                                yyerror(string($1) + " not no-return method.");
                             }
-                            string trace_msg = "nowIdent->name " + nowIdent->name + to_string(nowIdent->args.size()) + " " + to_string(para.size());
-                            Trace(trace_msg);
+                            Trace("nowIdent->name " + nowIdent->name + to_string(nowIdent->args.size()) + " " + to_string(para.size()));
                             if (nowIdent->args.size() > para.size()) {
-                                string msg = "Few arguments in " + string($1) +".";
-                                yyerror(msg);
+                                yyerror("Few arguments in " + string($1) +".");
                             }
                             else if (nowIdent->args.size() < para.size()) {
-                                string msg = "Over arguments in " + string($1) +".";
-                                yyerror(msg);
+                                yyerror("Over arguments in " + string($1) +".");
                             }
                             else {
                                 bool typeCheck = true;
                                 for (int i = 0; i < para.size(); i++) {
-                                    string trace_msg = "typeCheck " + to_string(i) + " : " + to_string(nowIdent->args[i]) + " " + to_string(para[i]);
-                                    Trace(trace_msg);
+                                    Trace("typeCheck " + to_string(i) + " : " + to_string(nowIdent->args[i]) + " " + to_string(para[i]));
                                     if (nowIdent->args[i] % TYPE_COUNT != para[i]) {
                                         typeCheck = false;
                                         break;
                                     }
                                 }
                                 if (!typeCheck) {
-                                    string msg = string($1) + " argument type check error.";
-                                    yyerror(msg);
+                                    yyerror(string($1) + " argument type check error.");
                                 }
                             }
                         }
@@ -1018,8 +980,7 @@ expression: expression LG_OR expression {
                   $$ = $1;
               }
               else {
-                  string msg = "can't use on non-boolean.";
-                  yyerror(msg);
+                  yyerror("can't use on non-boolean.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1033,8 +994,7 @@ expression: expression LG_OR expression {
                   $$ = $1;
               }
               else {
-                  string msg = "can't use on non-boolean.";
-                  yyerror(msg);
+                  yyerror("can't use on non-boolean.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1050,8 +1010,7 @@ expression: expression LG_OR expression {
                   $$ = $2;
               }
               else {
-                  string msg = "can't use on non-boolean.";
-                  yyerror(msg);
+                  yyerror("can't use on non-boolean.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1073,14 +1032,12 @@ expression: expression LG_OR expression {
                       $$ = 1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1102,14 +1059,12 @@ expression: expression LG_OR expression {
                       $$ = 1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1131,14 +1086,12 @@ expression: expression LG_OR expression {
                       $$ = 1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1160,14 +1113,12 @@ expression: expression LG_OR expression {
                       $$ = 1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1189,14 +1140,12 @@ expression: expression LG_OR expression {
                       $$ = 1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1218,14 +1167,12 @@ expression: expression LG_OR expression {
                       $$ = 1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1240,14 +1187,12 @@ expression: expression LG_OR expression {
                       $$ = $1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value or non-string.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value or non-string.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1262,14 +1207,12 @@ expression: expression LG_OR expression {
                       $$ = $1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1284,14 +1227,12 @@ expression: expression LG_OR expression {
                       $$ = $1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1306,14 +1247,12 @@ expression: expression LG_OR expression {
                       $$ = $1;
                   }
                   else {
-                      string msg = "left-side data type not equal with right-side data type.";
-                      yyerror(msg);
+                      yyerror("left-side data type not equal with right-side data type.");
                       $$ = TYPE_ERROR;
                   }  
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1327,8 +1266,7 @@ expression: expression LG_OR expression {
                   $$ = $1;
               }
               else {
-                  string msg = "can't use on non-integer.";
-                  yyerror(msg);
+                  yyerror("can't use on non-integer.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1342,8 +1280,7 @@ expression: expression LG_OR expression {
                   $$ = $2;
               }
               else {
-                  string msg = "can't use on non-num-value.";
-                  yyerror(msg);
+                  yyerror("can't use on non-num-value.");
                   $$ = TYPE_ERROR;
               }
           }
@@ -1366,8 +1303,7 @@ expression: expression LG_OR expression {
                 nowIdent = nowScope->lookup($1, true);
                 Trace($1);
                 if (nowIdent == NULL) {
-                    string msg = string($1) + " not declared.";
-                    yyerror(msg);
+                    yyerror(string($1) + " not declared.");
                     $$ = TYPE_ERROR;
                 }
                 else {
@@ -1380,8 +1316,7 @@ expression: expression LG_OR expression {
                         $$ = nowIdent->type % TYPE_COUNT;
                     }
                     else {
-                        string msg = string($1) + " not constant or variable.";
-                        yyerror(msg);
+                        yyerror(string($1) + " not constant or variable.");
                         $$ = TYPE_ERROR;
                     }
                 }
@@ -1393,8 +1328,7 @@ function_invocation: IDENT PARE_L option_comma_separated_expressions PARE_R {
                         Trace("function_invocation:");
                         nowIdent = nowScope->lookup($1, true);
                         if (nowIdent == NULL) {
-                            string msg = string($1) + " not declared.";
-                            yyerror(msg);
+                            yyerror(string($1) + " not declared.");
                             $$ = TYPE_ERROR;
                         }
                         else {
@@ -1405,33 +1339,27 @@ function_invocation: IDENT PARE_L option_comma_separated_expressions PARE_R {
                                 $$ = nowIdent->type % TYPE_COUNT;
                             }
                             else {
-                                string msg = string($1) + " not return-value method.";
-                                yyerror(msg);
+                                yyerror(string($1) + " not return-value method.");
                                 $$ = TYPE_ERROR;
                             }
-                            string trace_msg = "nowIdent->name " + nowIdent->name + to_string(nowIdent->args.size()) + " " + to_string(para.size());
-                            Trace(trace_msg);
+                            Trace("nowIdent->name " + nowIdent->name + to_string(nowIdent->args.size()) + " " + to_string(para.size()));
                             if (nowIdent->args.size() > para.size()) {
-                                string msg = "Few arguments in " + string($1) +".";
-                                yyerror(msg);
+                                yyerror("Few arguments in " + string($1) +".");
                             }
                             else if (nowIdent->args.size() < para.size()) {
-                                string msg = "Over arguments in " + string($1) +".";
-                                yyerror(msg);
+                                yyerror("Over arguments in " + string($1) +".");
                             }
                             else {
                                 bool typeCheck = true;
                                 for (int i = 0; i < para.size(); i++) {
-                                    string trace_msg = "typeCheck " + to_string(i) + " : " + to_string(nowIdent->args[i]) + " " + to_string(para[i]);
-                                    Trace(trace_msg);
+                                    Trace("typeCheck " + to_string(i) + " : " + to_string(nowIdent->args[i]) + " " + to_string(para[i]));
                                     if (nowIdent->args[i] % TYPE_COUNT != para[i]) {
                                         typeCheck = false;
                                         break;
                                     }
                                 }
                                 if (!typeCheck) {
-                                    string msg = string($1) + " argument type check error.";
-                                    yyerror(msg);
+                                    yyerror(string($1) + " argument type check error.");
                                 }
                             }
                         }
@@ -1458,32 +1386,27 @@ array_reference: IDENT SQUE_L integer_expression SQUE_R {
                     // still check grammar
                     nowIdent = nowScope->lookup($1, true);
                     if (nowIdent == NULL) {
-                        string msg = string($1) + " not declared.";
-                        yyerror(msg);
+                        yyerror(string($1) + " not declared.");
                         $$ = TYPE_ERROR;
                     }
                     else {
                         if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= CONST_BOOL) {
-                            string msg = string($1) + " is constant, not array.";
-                            yyerror(msg);
+                            yyerror(string($1) + " is constant, not array.");
                             $$ = TYPE_ERROR;
                         }
                         else if (nowIdent->type >= INTEGER_ARRAY && nowIdent->type <= BOOL_ARRAY) {
                             $$ = nowIdent->type % TYPE_COUNT;
                         }
                         else if (nowIdent->type >= METHOD_TYPE_FUNC && nowIdent->type <= METHOD_TYPE_BOOL) {
-                            string msg = string($1) + " is function, not array.";
-                            yyerror(msg);
+                            yyerror(string($1) + " is function, not array.");
                             $$ = TYPE_ERROR;
                         }
                         else if (nowIdent->type >= INTEGER_VAR && nowIdent->type <= BOOL_VAR) {
-                            string msg = string($1) + " is variable, not array.";
-                            yyerror(msg);
+                            yyerror(string($1) + " is variable, not array.");
                             $$ = TYPE_ERROR;
                         }
                         else {
-                            string msg = string($1) + " occur unknow error.";
-                            yyerror(msg);
+                            yyerror(string($1) + " occur unknow error.");
                             $$ = TYPE_ERROR;
                         }
                     }
@@ -1493,8 +1416,7 @@ array_reference: IDENT SQUE_L integer_expression SQUE_R {
 integer_expression: expression { 
                         Trace("integer_expression:");
                         if ($1 != 2) {
-                            string msg = "This expression not integer.";
-                            yyerror(msg);
+                            yyerror("This expression not integer.");
                         }
                   }
                   ;
@@ -1502,8 +1424,7 @@ integer_expression: expression {
 boolean_expression: expression {
                         Trace("boolean_expression:");
                         if ($1 != 1) {
-                            string msg = "This expression not boolean.";
-                            yyerror(msg);
+                            yyerror("This expression not boolean.");
                         } 
                   }
                   ; 
