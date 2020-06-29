@@ -127,6 +127,7 @@ option_types: /* empty */ { $$ = TYPE_NOT_DEFINE; }
 types: 
        INT { $$ = 0; }
      | REAL { $$ = 1; }
+     | FLOAT { $$ = 1; }
      | CHAR { $$ = 2; }
      | STRING { $$ = 3; }
      | BOOLEAN { $$ = 4; }
@@ -755,7 +756,7 @@ expression: expression LG_OR expression {
           }
           | expression REMA expression {
               Trace("expression REMA expression:");
-              if ($1 == 2 && $3 == 3){
+              if ($1 == 2 && $3 == 2){
                   $$ = $1;
               }
               else {

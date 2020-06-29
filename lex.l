@@ -31,7 +31,7 @@ int linenum = 1;
 char buf[MAX_LINE_LENG];
 %}
 
- /* Definitions */
+/* Definitions */
 DIGIT   [0-9]
 DIGITS  {DIGIT}+
 LETTER  [A-Za-z]
@@ -155,8 +155,8 @@ while	    { tokenKeyword("WHILE"); return(WHILE); }
 
  /* String */
 \"[^\"^\n]*\" { 
-    char c = getc(yyin);
-    ungetc(c, yyin);
+    char c = yyinput();
+    unput(c);
 
     if (c == '\"') {
         yymore();
