@@ -26,12 +26,16 @@ symbolTable::symbolTable() {
     this->scopeName = "";
     this->fatherTable = NULL;
     this->returnType = NON_TYPE;
+    this->localValIndex = 0;
+    this->returnCheck = false;
 }
 
 symbolTable::symbolTable(std::string scopeName, symbolTable* fatherTable) {
     this->scopeName = scopeName;
     this->fatherTable = fatherTable;
     this->returnType = NON_TYPE;
+    this->localValIndex = 0;
+    this->returnCheck = false;
 }
 
 symbolTable::~symbolTable() {

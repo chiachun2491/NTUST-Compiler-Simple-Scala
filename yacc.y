@@ -16,17 +16,35 @@
 
 #include <stdlib.h>
 #include <iostream>
-
+#include <fstream>
+#include <stack>
 #include "lex.yy.c"
 
 using namespace std;
 
-symbolTable* nowScope;
-symbolTable* fatherScope;
-ident* nowIdent;
-vector<int> para;
-bool legalMethod = true;
-string filename = "";
+symbolTable* nowScope;      // symbolTable of nowScope
+symbolTable* fatherScope;   // symbolTable of outsideScope
+ident* nowIdent;            // identifer 
+vector<int> para;           // method parameters
+bool legalMethod = true;    // method flag
+bool mainMethod = false;    // main method flag
+string filename = "";       // file name
+string rawname = "";        // file name without extension  
+int branchIndex = 0;        // branch index
+stack<int> branch;          // stack to store branch number
+ofstream fout;              // bytecode file stream
+bool assignValue = false;   // assign value flag
+bool canWrite = true;       // switch to dual_write
+bool elseBranch = false;    // flag to record need else branch number
+int tabs = 0;               // tabs number for output
+
+
+// union data for declaration
+int integerValue = 0;
+double realValue = 0.0;
+char charValue = ' ';
+std::string stringValue = "";
+bool boolValue = true;
 
 void yyerror(std::string msg) {
     std::cerr << BOLDYELLOW << filename << ":" << linenum << ": warning: " << BOLDWHITE << msg << RESET << std::endl;
@@ -36,15 +54,84 @@ void yyerror(std::string msg, int customLinenum) {
     std::cerr << BOLDYELLOW << filename << ":" << customLinenum << ": warning: " << BOLDWHITE << msg << RESET << std::endl;
 }
 
+void dual_write(ofstream &fs, std::string str) {
+    if (str.rfind("L", 0) != 0) {
+        // str not starts with prefix L label
+        if (!canWrite) {
+            for (int i = 0; i < tabs; i++) {
+                if (!i) {
+                    str = "  " + str;
+                }
+                else {
+                    str = "    " + str;
+                }
+            } 
+            str = "/*" + str + " */" ;
+        }
+        else {
+            for (int i = 0; i < tabs; i++) {
+                str = "    " + str;
+            } 
+        }
+    }
+    
+    std::cout << str << std::endl;
+    fs << str << std::endl;
+}
+
+std::string adjustStr(std::string str) //j
+{
+    std::string result = "";
+	for (int i = 0; i < str.length(); i++)
+	{
+		switch (str[i])
+		{
+		case '\b':
+            result += "\\b";
+			break;
+		case '\t':
+            result += "\\t";
+			break;
+		case '\n':
+            result += "\\n";
+			break;
+		case '\f':
+            result += "\\f";
+			break;
+		case '\r':
+            result += "\\r";
+			break;
+		case '\'':
+            result += "\\\'";
+			break;
+		case '\"':
+            result += "\\\"";
+			break;
+		case '\\':
+            result += "\\\\";
+			break;
+		default:
+            result += string(1, str[i]) ;
+			break;
+		}
+	}
+	return result;
+}
+
 %}
 %union {
     int intVal;
-    char* strVal;
     float realVal;
     char charVal;
+    bool boolVal;
+    char* strVal;
 }
+
 /* tokens */
-%token INTEGER_VAL REAL_VAL CHAR_VAL STRING_VAL
+%token <intVal> INTEGER_VAL 
+%token <realVal> REAL_VAL 
+%token <charVal> CHAR_VAL 
+%token <strVal> STRING_VAL
 %token COMM COLO PERI SEMI
 %token PARE_L PARE_R SQUE_L SQUE_R BRAC_L BRAC_R
 %token PLUS MINU MULT DIVI REMA
@@ -64,6 +151,8 @@ void yyerror(std::string msg, int customLinenum) {
 %left MULT DIVI REMA
 %nonassoc U_MINU
 
+%type <boolVal> boolean_value
+
 %type <intVal> types
 %type <intVal> option_types
 %type <intVal> option_assign_value
@@ -79,6 +168,10 @@ program: object_;
 object_: OBJECT IDENT BRAC_L { 
             Trace("object_: create new symbolTable.");
             nowScope = new symbolTable($2, NULL); 
+            
+            dual_write(fout, "class " + string($2));
+            dual_write(fout, "{");
+            tabs++;
          }
          object_inside_statements BRAC_R {
              nowIdent = nowScope->lookup("main", false);
@@ -88,6 +181,10 @@ object_: OBJECT IDENT BRAC_L {
              else if (nowIdent->type < METHOD_TYPE_FUNC || nowIdent->type > METHOD_TYPE_BOOL) {
                  yyerror("identifier main need to set as method-type", 0);
              }
+
+             tabs--;
+             dual_write(fout, "}");
+             fout.close();
          };
 
 object_inside_statements: /* empty */
@@ -112,6 +209,46 @@ const_declaration: IDENT option_types ASSI const_expression {
                         else {
                             nowScope->insert($1, CONST_INTEGER + $4);
                         }
+
+                        // set accessBC
+                        Trace("const_declaration set accessBC");
+                        nowIdent = nowScope->lookup($1, false);
+                        if (nowIdent != NULL) {
+                            switch (nowIdent->type) {
+                            case CONST_INTEGER:
+                                nowIdent->accessBC = "sipush " + to_string(integerValue);
+                                integerValue = 0;
+                                break;
+                            case CONST_REAL:
+                                nowIdent->accessBC = "sipush " + to_string(realValue);
+                                realValue = 0.0;
+                                break;
+                            case CONST_CHAR:
+                                nowIdent->accessBC = "ldc \"" + string(1, charValue) + "\"";
+                                charValue = ' ';
+                                break;
+                            case CONST_STRING: 
+                                nowIdent->accessBC = "ldc \"" + adjustStr(stringValue) + "\"";
+                                stringValue = "";
+                                break;
+                            case CONST_BOOL:
+                                if (boolValue) {
+                                    nowIdent->accessBC = "iconst_1";
+                                }
+                                else {
+                                    nowIdent->accessBC = "iconst_0";
+                                }
+                                boolValue = true;
+                                break;
+                            default:
+                                yyerror("const_declaration occur not const type.");
+                                break;
+                            }
+                            Trace("const_declaration set accessBC done " + nowIdent->accessBC);
+                        }
+                        else {
+                            yyerror("const_declaration not success.");
+                        }
                     }
                     else {
                         string msg = string($1) + " already declared.";
@@ -134,14 +271,29 @@ types:
      ;
 
 const_expression: 
-                  INTEGER_VAL { $$ = 0; }
-                | REAL_VAL { $$ = 1; }
-                | CHAR_VAL { $$ = 2; }
-                | STRING_VAL { $$ = 3; }
-                | boolean_value { $$ = 4; }
+                  INTEGER_VAL { 
+                    $$ = 0;
+                    integerValue = $1;
+                  }
+                | REAL_VAL { 
+                    $$ = 1;
+                    realValue = $1; 
+                  }
+                | CHAR_VAL { 
+                    $$ = 2; 
+                    charValue = $1; 
+                  }
+                | STRING_VAL { 
+                    $$ = 3; 
+                    stringValue = string($1);
+                  }
+                | boolean_value { 
+                    $$ = 4;
+                    boolValue = $1; 
+                  }
                 ;
 
-boolean_value: TRUE | FALSE;
+boolean_value: TRUE { $$ = true; } | FALSE { $$ = false; };
 
 var_declaration: IDENT option_types option_assign_value { 
                     Trace("var_declaration:");
@@ -164,6 +316,85 @@ var_declaration: IDENT option_types option_assign_value {
                         else {
                             yyerror("Variable declartion occur unknow error.", linenum - 1);
                         }
+
+                        // set accessBC
+                        nowIdent = nowScope->lookup($1, false);
+                        if (nowIdent != NULL) {
+                            // set bytecode whatever the typeCheck
+                            if (nowScope->fatherTable != NULL) {
+                                nowIdent->accessBC = "iload " + to_string(nowScope->localValIndex);
+                                nowIdent->storeBC = "istore " + to_string(nowScope->localValIndex);
+                                nowScope->localValIndex++;
+
+                                if (assignValue) {
+                                    Trace("var_declaration local var assignValue");
+                                    assignValue = false;
+                                    switch (nowIdent->type) {
+                                    case INTEGER_VAR:
+                                        dual_write(fout, "sipush " + to_string(integerValue));
+                                        dual_write(fout, nowIdent->storeBC);
+                                        integerValue = 0;
+                                        break;
+                                    case BOOL_VAR:
+                                        if (boolValue) {
+                                            dual_write(fout, "iconst_1");
+                                        }
+                                        else {
+                                            dual_write(fout, "iconst_0");
+                                        }
+                                        dual_write(fout, nowIdent->storeBC);
+                                        boolValue = true;
+                                        break;
+                                    default:
+                                        break;
+                                    }
+                                }
+                            }
+                            else {
+                                nowIdent->accessBC = "getstatic int " + nowScope->scopeName + "." + nowIdent->name;
+                                nowIdent->storeBC = "putstatic int " + nowScope->scopeName + "." + nowIdent->name;
+
+                                if (assignValue) {
+                                    Trace("var_declaration global var assignValue");
+                                    assignValue = false;
+                                    switch (nowIdent->type) {
+                                    case INTEGER_VAR:
+                                        dual_write(fout, "field static int " + nowIdent->name + " = " + to_string(integerValue));
+                                        integerValue = 0;
+                                        break;
+                                    case BOOL_VAR:
+                                        if (boolValue) {
+                                            dual_write(fout, "field static int " + nowIdent->name + " = 1");
+                                        }
+                                        else {
+                                            dual_write(fout, "field static int " + nowIdent->name + " = 0");
+                                        }
+                                        boolValue = true;
+                                        break;
+                                    default:
+                                        break;
+                                    }
+                                }
+                                else {
+                                    dual_write(fout, "field static int " + nowIdent->name);
+                                }
+                            }
+                            
+                            // Warning
+                            switch (nowIdent->type) {
+                            case INTEGER_VAR:
+                            case BOOL_VAR:
+                                break;
+                            default:
+                                yyerror("var_declaration occur not integer/boolean type.");
+                                break;
+                            }
+
+                            
+                        }
+                        else {
+                            yyerror("var_declaration not success.");
+                        } 
                     }
                     else {
                         string msg = string($1) + " already declared.";
@@ -174,7 +405,7 @@ var_declaration: IDENT option_types option_assign_value {
                ;
 
 option_assign_value: /* empty */ { $$ = TYPE_NOT_DEFINE; }
-                   | ASSI const_expression { $$ = $2; }
+                   | ASSI const_expression { $$ = $2; assignValue = true; }
                    ;
 
 array_declartion: IDENT COLO types SQUE_L INTEGER_VAL SQUE_R { 
@@ -191,25 +422,89 @@ array_declartion: IDENT COLO types SQUE_L INTEGER_VAL SQUE_R {
 
 method_declartion: DEF IDENT { 
                     Trace("method_declartion:");
+                    // legal method
                     if (nowScope->lookup($2, false) == NULL) {
                         legalMethod = true;
                         nowScope->insert($2, METHOD_TYPE_NOT_DEFINE); 
                         nowIdent = nowScope->lookup($2, false);
                         nowScope = nowScope->createChild($2); 
                     }
+                    // illegal method
                     else {
                         legalMethod = false;
                         string msg = string($2) + " already declared.";
                         yyerror(msg);
 
+                        canWrite = false;
+                        nowIdent = new ident($2, METHOD_TYPE_NOT_DEFINE);
                         nowScope = nowScope->createChild("temp_method"); 
                     }
                 } 
-                PARE_L option_method_formal_arguments PARE_R option_method_return_type 
+                PARE_L option_method_formal_arguments PARE_R option_method_return_type {
+                    Trace("method_declartion set accessBC and bytecode");
+
+                    // return type
+                    string returnTypeStr = "void ";
+                    switch (nowIdent->type) {
+                    case METHOD_TYPE_FUNC:
+                        break;
+                    case METHOD_TYPE_INTEGER:
+                    case METHOD_TYPE_BOOL:
+                        returnTypeStr = "int ";
+                        break;
+                    default:
+                        yyerror("method_declartion return type not integer/boolean/void type.");
+                        break;
+                    }
+
+                    // method name and formal arguments
+                    string nameArguments = nowIdent->name;
+                    nameArguments += "(";
+                    for (int i = 0; i < nowIdent->args.size(); i++) {
+                        if (i) {
+                            nameArguments += ", ";
+                        }
+                        switch (nowIdent->args[i]) {
+                        case INTEGER_VAR:
+                        case BOOL_VAR:
+                            nameArguments += "int";
+                            break;
+                        default:
+                            nameArguments += "int";
+                            yyerror("method_declartion formal argument type not integer/boolean type.");
+                            break;
+                        }
+                    }
+                    nameArguments += ")";
+                    
+                    // set accessBC
+                    nowIdent->accessBC = "invokestatic " + returnTypeStr + nowScope->fatherTable->scopeName + "." + nameArguments;
+                    
+                    // declartion bytecode
+                    if (nowIdent->name == "main") {
+                        dual_write(fout, "method public static void main(java.lang.String[])"); 
+                    }
+                    else {
+                        dual_write(fout, "method public static " + returnTypeStr + nameArguments);
+                    }
+                    dual_write(fout, "max_stack 15");
+                    dual_write(fout, "max_locals 15");
+                    dual_write(fout, "{");
+                    tabs++;
+                }
                 block {
+                    if (!nowScope->returnCheck) {
+                        dual_write(fout, "return");
+                    }
+
+                    tabs--;
+                    dual_write(fout, "}");
+
                     fatherScope = nowScope->fatherTable;
                     delete nowScope;
                     nowScope = fatherScope;
+
+                    canWrite = true;
                 };
                 
 option_method_formal_arguments: /* empty */ 
@@ -220,25 +515,29 @@ method_formal_arguments: method_formal_argument
 
 method_formal_argument: IDENT COLO types { 
                             Trace("method_formal_argument:");
-                            if (legalMethod) {
-                                nowIdent->addParam(INTEGER_VAR + $3);
-                                string trace_msg = "size: " + to_string(nowIdent->args.size());
-                                Trace(trace_msg);
-                            }
+                            nowIdent->addParam(INTEGER_VAR + $3);
+                            string trace_msg = "size: " + to_string(nowIdent->args.size());
+                            Trace(trace_msg);
+
                             nowScope->insert($1, INTEGER_VAR + $3);
+                            ident* arguIdent = nowScope->lookup($1, false);
+                            if (arguIdent != NULL) {
+                                arguIdent->accessBC = "iload " + to_string(nowScope->localValIndex);
+                                arguIdent->storeBC = "istore " + to_string(nowScope->localValIndex);
+                                nowScope->localValIndex++;
+                            }
+                            else {
+                                yyerror("method_formal_argument occur error");
+                            }
                         }
                         ;
 
 option_method_return_type: /* empty */ { 
-                            if (legalMethod) {
-                                nowIdent->type = METHOD_TYPE_FUNC;
-                            }
+                            nowIdent->type = METHOD_TYPE_FUNC;
                             nowScope->returnType = METHOD_TYPE_FUNC;
                          }
                          | COLO types { 
-                            if (legalMethod) {
-                                nowIdent->type = METHOD_TYPE_INTEGER + $2;
-                            } 
+                            nowIdent->type = METHOD_TYPE_INTEGER + $2;
                             nowScope->returnType = METHOD_TYPE_INTEGER + $2;
                          }
                          ;
@@ -271,6 +570,9 @@ statement_1: IDENT ASSI expression {
                     yyerror(msg, linenum - 1);
                 }
                 else {
+                    // set bytecode whatever type check
+                    dual_write(fout, nowIdent->storeBC);
+
                     if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= CONST_BOOL) {
                         string msg = string($1) + " is constant, can't reassign.";
                         yyerror(msg, linenum - 1);
@@ -321,6 +623,11 @@ statement_1: IDENT ASSI expression {
 
 statement_2: IDENT SQUE_L integer_expression SQUE_R ASSI expression {
                 Trace("statement_2:");
+
+                // warning array
+                yyerror("Array not supported in this program.", linenum - 1);
+
+                // still check grammar
                 nowIdent = nowScope->lookup($1, true);
                 if (nowIdent == NULL) {
                     string msg = string($1) + " not declared.";
@@ -353,22 +660,57 @@ statement_2: IDENT SQUE_L integer_expression SQUE_R ASSI expression {
             }
             ;
 
-statement_3: PRINT PARE_L expression PARE_R { 
+statement_3: PRINT {
+                dual_write(fout, "getstatic java.io.PrintStream java.lang.System.out");
+            }
+             PARE_L expression PARE_R { 
                 Trace("statement_3:");
-                if ($3 == TYPE_ERROR) {
-                    yyerror("This expression can't print.", linenum - 1);
+                // integer/boolean expression
+                if ($4 == 2 || $4 == 1 ) {
+                    dual_write(fout, "invokevirtual void java.io.PrintStream.print(int)");
                 }
-           }
-           | PRINTLN PARE_L expression PARE_R { 
-                Trace("statement_3:");
-                if ($3 == TYPE_ERROR) {
+                // string expression
+                else if ($4 == 0) {
+                    dual_write(fout, "invokevirtual void java.io.PrintStream.print(java.lang.String)");
+                }
+                else {
                     yyerror("This expression can't print.", linenum - 1);
+                    // fix the stack
+                    dual_write(fout, "pop");
+                    dual_write(fout, "ldc \"TYPE_ERROR\"");
+                    dual_write(fout, "invokevirtual void java.io.PrintStream.print(java.lang.String)");
+                }
+            }
+           | PRINTLN {
+                dual_write(fout, "getstatic java.io.PrintStream java.lang.System.out");
+            } 
+            PARE_L expression PARE_R { 
+                Trace("statement_3:");
+                // integer/boolean expression
+                if ($4 == 2 || $4 == 1 ) {
+                    dual_write(fout, "invokevirtual void java.io.PrintStream.println(int)");
+                }
+                // string expression
+                else if ($4 == 0) {
+                    dual_write(fout, "invokevirtual void java.io.PrintStream.println(java.lang.String)");
+                }
+                else {
+                    yyerror("This expression can't print.", linenum - 1);
+                    // fix the stack
+                    dual_write(fout, "pop");
+                    dual_write(fout, "ldc \"TYPE_ERROR\"");
+                    dual_write(fout, "invokevirtual void java.io.PrintStream.println(java.lang.String)");
                 }
            }
            ;
 
 statement_4: READ IDENT {
                 Trace("statement_4:");
+
+                // warning read
+                yyerror("read not supported in this program.", linenum - 1);
+
+                // still check grammar
                 nowIdent = nowScope->lookup($2, true);
                 if (nowIdent == NULL) {
                     string msg = string($2) + " not declared.";
@@ -403,6 +745,10 @@ statement_4: READ IDENT {
 
 statement_5: RETURN {
                 Trace("statement_5: RETURN");
+
+                // set bytecode whatever type check
+                dual_write(fout, "return");
+                
                 symbolTable* temp_scope = nowScope;
                 while (temp_scope->returnType == NON_TYPE) {
                     if (temp_scope->fatherTable == NULL) {
@@ -411,6 +757,7 @@ statement_5: RETURN {
                     temp_scope = temp_scope->fatherTable;
                 }
                 Trace("Return scope name:" + temp_scope->scopeName);
+                temp_scope->returnCheck = true;
                 if (temp_scope->returnType != METHOD_TYPE_FUNC) {
                     if (temp_scope->returnType >= METHOD_TYPE_INTEGER && temp_scope->returnType <= METHOD_TYPE_BOOL) {
                         string msg = temp_scope->scopeName + " need return value.";
@@ -424,6 +771,10 @@ statement_5: RETURN {
             }
            | RETURN expression { 
                 Trace("statement_5: RETURN expression");
+                
+                // set bytecode whatever type check
+                dual_write(fout, "ireturn");
+
                 symbolTable* temp_scope = nowScope;
                 while (temp_scope->returnType == NON_TYPE) {
                     if (temp_scope->fatherTable == NULL) {
@@ -432,6 +783,7 @@ statement_5: RETURN {
                     temp_scope = temp_scope->fatherTable;
                 }
                 Trace("Return scope name:" + temp_scope->scopeName);
+                temp_scope->returnCheck = true;
                 if (temp_scope->returnType >= METHOD_TYPE_INTEGER && temp_scope->returnType <= METHOD_TYPE_BOOL) {
                     if (temp_scope->returnType % TYPE_COUNT != $2) {
                         string msg = "Return type error.";
@@ -451,7 +803,23 @@ statement_5: RETURN {
             }
            ;
 
-conditional_statement: { Trace("conditional_statement:"); } IF PARE_L boolean_expression PARE_R block_or_simple_statement option_else_statement;
+conditional_statement: { Trace("conditional_statement:"); } IF PARE_L boolean_expression PARE_R {
+                            elseBranch = false;
+                            branch.push(branchIndex + 1);
+                            branch.push(branchIndex);
+                            branch.push(branchIndex + 1);
+                            branch.push(branchIndex);
+                            branchIndex += 2;
+
+                            dual_write(fout, "ifeq L" + to_string(branch.top()));
+                            branch.pop();
+                        } 
+                        block_or_simple_statement option_else_statement {
+                            if (elseBranch) {
+                                dual_write(fout, "L" + to_string(branch.top()) + ":");
+                            }
+                            branch.pop();
+                        };
 
 block_or_simple_statement: {
                                Trace("block_or_simple_statement:");
@@ -463,9 +831,46 @@ block_or_simple_statement: {
                            } 
                            | statement;
 
-option_else_statement: /* empty */ | ELSE block_or_simple_statement;
+option_else_statement: /* empty */ {
+                        branch.pop();
+                        dual_write(fout, "L" + to_string(branch.top()) + ":");
+                        branch.pop();
+                      }
+                      | ELSE {
+                          elseBranch = true;
+                          
+                          int gotoIndex = branch.top();
+                          branch.pop();
+                          int labelIndex = branch.top();
+                          branch.pop();
 
-while_loop_statement: { Trace("while_loop_statement:"); } WHILE PARE_L boolean_expression PARE_R block_or_simple_statement;
+                          dual_write(fout, "goto L" + to_string(gotoIndex));
+                          dual_write(fout, "L" + to_string(labelIndex) + ":");
+                      } block_or_simple_statement;
+
+while_loop_statement: { Trace("while_loop_statement:"); } WHILE {
+                            branch.push(branchIndex + 1);
+                            branch.push(branchIndex);
+                            branch.push(branchIndex + 1);
+                            branch.push(branchIndex);
+                            branchIndex += 2;
+
+                            dual_write(fout, "L" + to_string(branch.top()) + ":");
+                            branch.pop();
+                      } 
+                      PARE_L boolean_expression PARE_R {
+                          dual_write(fout, "ifeq L" + to_string(branch.top()));
+                          branch.pop();
+                      } 
+                      block_or_simple_statement {
+                          int gotoIndex = branch.top();
+                          branch.pop();
+                          int labelIndex = branch.top();
+                          branch.pop();
+
+                          dual_write(fout, "goto L" + to_string(gotoIndex));
+                          dual_write(fout, "L" + to_string(labelIndex) + ":");
+                      };
 
 for_loop_statement: FOR PARE_L IDENT {
                         Trace("for_loop_statement:");
@@ -479,7 +884,64 @@ for_loop_statement: FOR PARE_L IDENT {
                             yyerror(msg);
                         }
                     }
-                    ARRO INTEGER_VAL TO INTEGER_VAL PARE_R block_or_simple_statement;
+                    ARRO INTEGER_VAL TO INTEGER_VAL {
+                        // push initialValue
+                        dual_write(fout, "sipush " + to_string($6));
+                        // store to ident
+                        dual_write(fout, nowIdent->storeBC);
+
+                        branch.push(branchIndex + 1);
+                        branch.push(branchIndex);
+                        branch.push(branchIndex + 1);
+                        branch.push(branchIndex);
+                        branchIndex += 2;
+
+                        dual_write(fout, "L" + to_string(branch.top()) + ":");
+                        branch.pop();
+
+                    } PARE_R block_or_simple_statement {
+                        // push initialValue
+                        dual_write(fout, "sipush " + to_string($8));
+                        // get identValue
+                        nowIdent = nowScope->lookup($3, true);
+                        if (nowIdent != NULL) {
+                            dual_write(fout, nowIdent->accessBC);
+                        }
+                        else {
+                            string msg = string($3) + " not found (occur error at forloop bytecode).";
+                            yyerror(msg);
+                        }
+                        // ifequal exit
+                        dual_write(fout, "isub");
+                        dual_write(fout, "ifeq L" + to_string(branch.top()));
+                        branch.pop();
+
+                        // ident ++ and save
+                        dual_write(fout, "iconst_1");
+                        if (nowIdent != NULL) {
+                            dual_write(fout, nowIdent->accessBC);
+                        }
+                        else {
+                            string msg = string($3) + " not found (occur error at forloop bytecode).";
+                            yyerror(msg);
+                        }
+                        dual_write(fout, "iadd");
+                        if (nowIdent != NULL) {
+                            dual_write(fout, nowIdent->storeBC);
+                        }
+                        else {
+                            string msg = string($3) + " not found (occur error at forloop bytecode).";
+                            yyerror(msg);
+                        }
+
+                        // goback
+                        dual_write(fout, "goto L" + to_string(branch.top()));
+                        branch.pop();
+
+                        // exit label
+                        dual_write(fout, "L" + to_string(branch.top()) + ":");
+                        branch.pop();
+                    };
 
 procedure_invocation: IDENT {
                         Trace("procedure_invocation:");
@@ -489,6 +951,9 @@ procedure_invocation: IDENT {
                             yyerror(msg);
                         }
                         else {
+                            // set bytecode whatever type check
+                            dual_write(fout, nowIdent->accessBC);
+
                             if (nowIdent->type != METHOD_TYPE_FUNC) {
                                 string msg = string($1) + " not no-return method.";
                                 yyerror(msg);
@@ -507,6 +972,9 @@ procedure_invocation: IDENT {
                             yyerror(msg);
                         }
                         else {
+                            // set bytecode whatever type check
+                            dual_write(fout, nowIdent->accessBC);
+
                             if (nowIdent->type != METHOD_TYPE_FUNC) {
                                 string msg = string($1) + " not no-return method.";
                                 yyerror(msg);
@@ -542,6 +1010,10 @@ procedure_invocation: IDENT {
 
 expression: expression LG_OR expression {
               Trace("expression LG_OR expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "ior");
+
               if ($1 == 1 && $3 == 1){
                   $$ = $1;
               }
@@ -553,6 +1025,10 @@ expression: expression LG_OR expression {
           }
           | expression LG_AND expression {
               Trace("expression LG_AND expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "iand");
+
               if ($1 == 1 && $3 == 1){
                   $$ = $1;
               }
@@ -564,6 +1040,11 @@ expression: expression LG_OR expression {
           }
           | LG_NOT expression {
               Trace("LG_NOT expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "ixor");
+
               Trace(to_string($2));
               if ($2 == 1){
                   $$ = $2;
@@ -576,6 +1057,17 @@ expression: expression LG_OR expression {
           }
           | expression RL_LT expression {
               Trace("expression RL_LT expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+              dual_write(fout, "iflt L" + to_string(branchIndex));
+              dual_write(fout, "iconst_0");
+              dual_write(fout, "goto L" + to_string(branchIndex + 1));
+              dual_write(fout, "L" + to_string(branchIndex) + ":");
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "L" + to_string(branchIndex + 1) + ":");
+              branchIndex += 2;
+
               if (($1 == 2 || $1 == 3 || $1 == 4) && ($3 == 2 || $3 == 3 || $3 == 4)) {
                   if ($1 == $3) {
                       $$ = 1;
@@ -594,6 +1086,17 @@ expression: expression LG_OR expression {
           }
           | expression RL_LE expression {
               Trace("expression RL_LE expression:");
+              
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+              dual_write(fout, "ifle L" + to_string(branchIndex));
+              dual_write(fout, "iconst_0");
+              dual_write(fout, "goto L" + to_string(branchIndex + 1));
+              dual_write(fout, "L" + to_string(branchIndex) + ":");
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "L" + to_string(branchIndex + 1) + ":");
+              branchIndex += 2;
+
               if (($1 == 2 || $1 == 3 || $1 == 4) && ($3 == 2 || $3 == 3 || $3 == 4)) {
                   if ($1 == $3) {
                       $$ = 1;
@@ -612,6 +1115,17 @@ expression: expression LG_OR expression {
           }
           | expression RL_GE expression {
               Trace("expression RL_GE expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+              dual_write(fout, "ifge L" + to_string(branchIndex));
+              dual_write(fout, "iconst_0");
+              dual_write(fout, "goto L" + to_string(branchIndex + 1));
+              dual_write(fout, "L" + to_string(branchIndex) + ":");
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "L" + to_string(branchIndex + 1) + ":");
+              branchIndex += 2;
+
               if (($1 == 2 || $1 == 3 || $1 == 4) && ($3 == 2 || $3 == 3 || $3 == 4)) {
                   if ($1 == $3) {
                       $$ = 1;
@@ -630,6 +1144,17 @@ expression: expression LG_OR expression {
           }
           | expression RL_GT expression {
               Trace("expression RL_GT expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+              dual_write(fout, "ifgt L" + to_string(branchIndex));
+              dual_write(fout, "iconst_0");
+              dual_write(fout, "goto L" + to_string(branchIndex + 1));
+              dual_write(fout, "L" + to_string(branchIndex) + ":");
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "L" + to_string(branchIndex + 1) + ":");
+              branchIndex += 2;
+
               if (($1 == 2 || $1 == 3 || $1 == 4) && ($3 == 2 || $3 == 3 || $3 == 4)) {
                   if ($1 == $3) {
                       $$ = 1;
@@ -648,6 +1173,17 @@ expression: expression LG_OR expression {
           }
           | expression RL_EQ expression {
               Trace("expression RL_EQ expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+              dual_write(fout, "ifeq L" + to_string(branchIndex));
+              dual_write(fout, "iconst_0");
+              dual_write(fout, "goto L" + to_string(branchIndex + 1));
+              dual_write(fout, "L" + to_string(branchIndex) + ":");
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "L" + to_string(branchIndex + 1) + ":");
+              branchIndex += 2;
+
               if (($1 >= 0 && $1 <= 4) && ($3 >=0 && $3 <= 4)) {
                   if ($1 == $3) {
                       $$ = 1;
@@ -666,6 +1202,17 @@ expression: expression LG_OR expression {
           }
           | expression RL_NE expression {
               Trace("expression RL_NE expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+              dual_write(fout, "ifne L" + to_string(branchIndex));
+              dual_write(fout, "iconst_0");
+              dual_write(fout, "goto L" + to_string(branchIndex + 1));
+              dual_write(fout, "L" + to_string(branchIndex) + ":");
+              dual_write(fout, "iconst_1");
+              dual_write(fout, "L" + to_string(branchIndex + 1) + ":");
+              branchIndex += 2;
+
               if (($1 >= 0 && $1 <= 4) && ($3 >=0 && $3 <= 4)) {
                   if ($1 == $3) {
                       $$ = 1;
@@ -684,6 +1231,10 @@ expression: expression LG_OR expression {
           }
           | expression PLUS expression {
               Trace("expression PLUS expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "iadd");
+
               if (($1 == 2 || $1 == 3 || $1 == 4 || $1 == 0) && ($3 == 2 || $3 == 3 || $3 == 4 || $3 == 0)) {
                   if ($1 == $3) {
                       $$ = $1;
@@ -702,6 +1253,10 @@ expression: expression LG_OR expression {
           }
           | expression MINU expression {
               Trace("expression MINU expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "isub");
+
               if (($1 == 2 || $1 == 3) && ($3 == 2 || $3 == 3)) {
                   if ($1 == $3) {
                       $$ = $1;
@@ -720,6 +1275,10 @@ expression: expression LG_OR expression {
           }
           | expression MULT expression {
               Trace("expression MULT expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "imul");
+
               if (($1 == 2 || $1 == 3) && ($3 == 2 || $3 == 3)) {
                   if ($1 == $3) {
                       $$ = $1;
@@ -738,6 +1297,10 @@ expression: expression LG_OR expression {
           }
           | expression DIVI expression {
               Trace("expression DIVI expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "idiv");
+
               if (($1 == 2 || $1 == 3) && ($3 == 2 || $3 == 3)) {
                   if ($1 == $3) {
                       $$ = $1;
@@ -756,6 +1319,10 @@ expression: expression LG_OR expression {
           }
           | expression REMA expression {
               Trace("expression REMA expression:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "irem");
+
               if ($1 == 2 && $3 == 2){
                   $$ = $1;
               }
@@ -767,6 +1334,10 @@ expression: expression LG_OR expression {
           }
           | MINU expression %prec U_MINU {
               Trace("MINU expression %prec U_MINU:");
+
+              // set bytecode whatever type check
+              dual_write(fout, "ineg");
+
               if ($2 == 2 || $2 == 3){
                   $$ = $2;
               }
@@ -777,11 +1348,19 @@ expression: expression LG_OR expression {
               }
           }
           | PARE_L expression PARE_R { $$ = $2; }
-          | INTEGER_VAL { $$ = 2; }
+          | INTEGER_VAL { $$ = 2; dual_write(fout, "sipush " + to_string($1)); }
           | REAL_VAL { $$ = 3; }
           | CHAR_VAL { $$ = 4; }
-          | STRING_VAL { $$ = 0;}
-          | boolean_value { $$ = 1; }
+          | STRING_VAL { $$ = 0; dual_write(fout, "ldc \"" + adjustStr(string($1)) + "\""); }
+          | boolean_value { 
+              $$ = 1; 
+              if ($1) {
+                  dual_write(fout, "iconst_1");
+              }
+              else {
+                  dual_write(fout, "iconst_0");
+              }
+          }
           | IDENT {
                 Trace("expression: IDENT:");
                 nowIdent = nowScope->lookup($1, true);
@@ -793,6 +1372,10 @@ expression: expression LG_OR expression {
                 }
                 else {
                     Trace(to_string(nowIdent->type));
+
+                    // set bytecode whatever type check
+                    dual_write(fout, nowIdent->accessBC);
+
                     if (nowIdent->type >= CONST_INTEGER && nowIdent->type <= BOOL_VAR) {
                         $$ = nowIdent->type % TYPE_COUNT;
                     }
@@ -815,6 +1398,9 @@ function_invocation: IDENT PARE_L option_comma_separated_expressions PARE_R {
                             $$ = TYPE_ERROR;
                         }
                         else {
+                            // set bytecode whatever type check
+                            dual_write(fout, nowIdent->accessBC);
+
                             if (nowIdent->type >= METHOD_TYPE_INTEGER && nowIdent->type <= METHOD_TYPE_BOOL) {
                                 $$ = nowIdent->type % TYPE_COUNT;
                             }
@@ -865,6 +1451,11 @@ comma_separated_expression: expression {
 
 array_reference: IDENT SQUE_L integer_expression SQUE_R {
                     Trace("array_reference:");
+
+                    // warning array
+                    yyerror("Array not supported in this program.", linenum - 1);
+
+                    // still check grammar
                     nowIdent = nowScope->lookup($1, true);
                     if (nowIdent == NULL) {
                         string msg = string($1) + " not declared.";
@@ -921,11 +1512,14 @@ int main(int argc, char *argv[])
 {
     /* open the source program file */
     if (argc != 2) {
-        printf ("Usage: parser filename\n");
+        std::cout << "Usage: " << argv[0] << " <filename>" << std::endl;
         exit(1);
     }
     yyin = fopen(argv[1], "r");         /* open input file */
     filename = string(argv[1]);
+
+    rawname = filename.substr(0, filename.find_last_of("."));
+    fout.open(rawname + ".jasm");
 
     /* perform parsing */
     if (yyparse() == 1)                 /* parsing */

@@ -49,6 +49,19 @@ public:
     // FOR OTHER: empty vector
     std::vector<int> args;
 
+    // getstatic, iload, sipush, ldc, iconst_1, iconst_0, invokestatic byteCode
+    std::string accessBC;
+
+    // putstatic, istore byteCode
+    std::string storeBC;
+
+    // union data for constants
+    int integerValue;
+    double realValue;
+    char charValue;
+    std::string stringValue;
+    bool boolValue;
+
     /* Insert Method Parameter data type */
     void addParam(int type);
 };
@@ -71,6 +84,12 @@ public:
 
     // used to check this symbolTable return type
     int returnType;
+
+    // record local variables index
+    int localValIndex;
+
+    // record return or not
+    bool returnCheck;
 
     /* insert identifier in symbol table */
     void insert(std::string s, int type);
