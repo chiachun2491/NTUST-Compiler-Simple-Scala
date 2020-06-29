@@ -22,6 +22,6 @@ object fib
     
     // print result
     print ("Result of computation: ")
-    println (n)
+    println (Fn)
   }
 }

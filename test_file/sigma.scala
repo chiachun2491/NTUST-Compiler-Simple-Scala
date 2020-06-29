@@ -18,7 +18,7 @@ object Sigma
       sum = sum + index
       index = index + 1
     }
-    print (The sum is ")
+    print ("The sum is ")
     println (sum)
   }
 }

@@ -1,7 +1,7 @@
 /*
  * Example with Functions
  */
-object example { 
+object DuplicateMethod { 
     // constants 
     val a = 5
     
@@ -12,6 +12,12 @@ object example {
     def add (a: int, b: int) : int {
         return a+b 
     }
+
+    // same name function declaration
+    def add (b: int, c: int) : int {
+        return b+c 
+    }
+
     // main statements
     def main() {
         c = add(a, 10) 
